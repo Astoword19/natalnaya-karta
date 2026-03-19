@@ -162,8 +162,33 @@ async function initSWE() {
     swe = new SwissEph();
     await swe.initSwissEph();
     
+    // Диагностика — какие методы доступны
+    const proto = Object.getOwnPropertyNames(Object.getPrototypeOf(swe));
+    console.log('[SWE] All methods:', proto.join(', '));
+    
+    // Тестовый расчёт Солнца
+    const testJd = (swe.julday || swe.swe_julday).call(swe, 2014, 11, 21, 9.0, 1);
+    console.log('[SWE] Test JD:', testJd);
+    
+    // Пробуем разные варианты calc_ut
+    for (const fnName of ['calc_ut', 'swe_calc_ut', 'calc', 'swe_calc']) {
+      if (typeof swe[fnName] === 'function') {
+        try {
+          const testResult = swe[fnName](testJd, 0, 256);
+          console.log(`[SWE] ${fnName}(jd, 0, 256):`, JSON.stringify(testResult));
+        } catch(e) {
+          console.log(`[SWE] ${fnName} error:`, e.message);
+        }
+        try {
+          const testResult2 = swe[fnName](testJd, 0, 2);
+          console.log(`[SWE] ${fnName}(jd, 0, 2):`, JSON.stringify(testResult2));
+        } catch(e2) {
+          console.log(`[SWE] ${fnName} flag=2 error:`, e2.message);
+        }
+      }
+    }
+    
     el.textContent = 'готово'; el.className = 'status ok';
-    console.log('[SWE] Initialized successfully');
   } catch(e) {
     console.error('[SWE] Init failed:', e);
     el.textContent = 'ошибка загрузки'; el.className = 'status err';
@@ -179,12 +204,21 @@ function sweJulday(year, month, day, hour) {
 function sweCalcUt(jd, body) {
   const fn = swe.calc_ut || swe.swe_calc_ut;
   const r = fn.call(swe, jd, body, SEFLG_SPEED);
+  
+  // Лог первых вызовов для диагностики
+  if (body <= 1) console.log(`[SWE] calc_ut body=${body}: type=${typeof r}, keys=${r ? Object.keys(r) : 'null'}, val=${JSON.stringify(r)?.substring(0,300)}`);
+  
   if (r && r.xx) return r.xx;
-  if (r && r.data) return r.data;
+  if (r && r.data && Array.isArray(r.data)) return r.data;
   if (Array.isArray(r)) return r;
   if (r && r.longitude !== undefined)
     return [r.longitude, r.latitude || 0, r.distance || 0, r.longitudeSpeed || r.speedLong || 0];
-  console.warn('[SWE] Unknown calc_ut format:', r);
+  // Попробуем достать числовые значения из объекта
+  if (r && typeof r === 'object') {
+    const vals = Object.values(r).filter(v => typeof v === 'number');
+    if (vals.length >= 4) { console.log('[SWE] Extracted numeric values:', vals); return vals; }
+  }
+  console.warn('[SWE] Unknown calc_ut format, body=' + body + ':', JSON.stringify(r)?.substring(0,500));
   return [0, 0, 0, 0];
 }
 
