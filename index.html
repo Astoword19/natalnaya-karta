@@ -157,9 +157,11 @@ async function initSWE() {
   const el = document.getElementById('sweStatus');
   try {
     const mod = await import('https://cdn.jsdelivr.net/gh/prolaxu/swisseph-wasm@main/src/swisseph.js');
-    swe = await (mod.default || mod)();
+    const SwissEph = mod.default || mod;
+    swe = await new SwissEph();
     el.textContent = 'готово'; el.className = 'status ok';
-    console.log('[SWE] Initialized. Methods:', Object.keys(swe).filter(k => k.startsWith('swe_')).join(', '));
+    console.log('[SWE] Initialized. Type:', typeof swe);
+    console.log('[SWE] Methods:', Object.getOwnPropertyNames(Object.getPrototypeOf(swe)).filter(k => k.startsWith('swe_')).join(', '));
   } catch(e) {
     console.error('[SWE] Init failed:', e);
     el.textContent = 'ошибка загрузки'; el.className = 'status err';
