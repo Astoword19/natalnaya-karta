@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Транзиты → планеты сегодня</title>
+<meta name="theme-color" content="#111110">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500&family=DM+Sans:wght@400;500;600&display=swap');
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #111110; color: #bbb8ac; font-family: 'DM Sans', sans-serif; font-size: 14px; min-height: 100vh; }
+  ::selection { background: #c9956b; color: #111; }
+  .wrap { max-width: 740px; margin: 0 auto; }
+  .header { border-bottom: 1px solid #2a2a26; background: linear-gradient(180deg, #1a1a18, #111110); }
+  .header-inner { padding: 26px 24px 22px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+  h1 { font-family: 'IBM Plex Mono', monospace; font-size: 20px; font-weight: 500; color: #e5e1d5; letter-spacing: 0.3px; }
+  .sub { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #555; margin-top: 4px; }
+  .status { font-family: 'IBM Plex Mono', monospace; font-size: 10px; padding: 5px 12px; border-radius: 3px; }
+  .status.ok { background: #1a2a1a; color: #4a4; }
+  .status.loading { background: #2a2a1a; color: #aa4; }
+  .status.err { background: #2a1a1a; color: #a44; }
+  .form-wrap { padding: 22px 24px 20px; border-bottom: 1px solid #1e1e1c; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 600px) { .grid { grid-template-columns: 1fr; } }
+  .full { grid-column: 1 / -1; }
+  label { font-family: 'IBM Plex Mono', monospace; font-size: 10px; font-weight: 500; color: #777; letter-spacing: 1.5px; text-transform: uppercase; display: block; margin-bottom: 6px; }
+  input, select { width: 100%; padding: 10px 14px; background: #1a1a18; border: 1px solid #2a2a26; border-radius: 4px; color: #e5e1d5; font-size: 14px; font-family: 'IBM Plex Mono', monospace; outline: none; -webkit-appearance: none; }
+  input:focus, select:focus { border-color: #c9956b; }
+  .btn { margin-top: 18px; width: 100%; padding: 13px; background: #c9956b; color: #111; border: none; border-radius: 4px; font-size: 13px; font-weight: 600; letter-spacing: 2px; cursor: pointer; font-family: 'IBM Plex Mono', monospace; }
+  .btn:hover { background: #b8844f; }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .nav-btn { display: inline-block; padding: 9px 22px; background: #1a1a18; border: 1px solid #2a2a26; border-radius: 4px; color: #c9956b; font-size: 12px; font-weight: 500; cursor: pointer; font-family: 'IBM Plex Mono', monospace; text-decoration: none; }
+  .nav-btn:hover { border-color: #c9956b; }
+  .out-wrap { padding: 20px 24px 24px; }
+  .out-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 10px; }
+  .out-title { font-family: 'IBM Plex Mono', monospace; font-size: 11px; font-weight: 500; color: #777; letter-spacing: 0.5px; text-transform: uppercase; }
+  .copy-btn { padding: 9px 22px; border: none; border-radius: 4px; font-size: 13px; font-weight: 600; cursor: pointer; font-family: 'IBM Plex Mono', monospace; background: #c9956b; color: #111; }
+  .copy-btn:hover { background: #b8844f; }
+  .copy-btn.copied { background: #2d6a27; color: #fff; }
+  textarea { width: 100%; background: #0c0c0b; border: 1px solid #222; border-radius: 4px; color: #c8c4b8; font-family: 'IBM Plex Mono', monospace; font-size: 12px; line-height: 1.7; padding: 18px 20px; resize: vertical; outline: none; }
+  .error { color: #c44; margin-top: 10px; font-size: 12px; font-family: 'IBM Plex Mono', monospace; }
+  .footer { padding: 20px 24px 36px; font-size: 11px; color: #3a3a36; line-height: 1.7; font-family: 'IBM Plex Mono', monospace; border-top: 1px solid #1a1a18; }
+  .tz-select { display: flex; gap: 10px; align-items: center; }
+  .tz-select select { max-width: 200px; }
+</style>
+</head>
+<body>
+
+<div class="header"><div class="wrap header-inner">
+  <div><h1>Транзиты → планеты</h1><p class="sub">Swiss Ephemeris (WASM) — положения на выбранную дату</p></div>
+  <div style="display:flex;gap:10px;align-items:center;">
+    <span class="status loading" id="sweStatus">загрузка...</span>
+    <a href="index.html" class="nav-btn">← Натальная карта</a>
+  </div>
+</div></div>
+
+<div class="wrap form-wrap">
+  <div class="grid">
+    <div><label>Дата</label><input type="date" id="date"></div>
+    <div><label>Время</label><input type="time" id="time" value="12:00"></div>
+    <div class="full">
+      <label>Часовой пояс (UTC)</label>
+      <select id="tz">
+        <option value="-12">UTC-12</option><option value="-11">UTC-11</option>
+        <option value="-10">UTC-10</option><option value="-9">UTC-9</option>
+        <option value="-8">UTC-8</option><option value="-7">UTC-7</option>
+        <option value="-6">UTC-6</option><option value="-5">UTC-5</option>
+        <option value="-4">UTC-4</option><option value="-3">UTC-3</option>
+        <option value="-2">UTC-2</option><option value="-1">UTC-1</option>
+        <option value="0">UTC+0</option><option value="1">UTC+1</option>
+        <option value="2">UTC+2</option><option value="3" selected>UTC+3 (Москва)</option>
+        <option value="4">UTC+4</option><option value="5">UTC+5</option>
+        <option value="6">UTC+6</option><option value="7">UTC+7</option>
+        <option value="8">UTC+8</option><option value="9">UTC+9</option>
+        <option value="10">UTC+10</option><option value="11">UTC+11</option>
+        <option value="12">UTC+12</option>
+      </select>
+    </div>
+  </div>
+  <button class="btn" id="calcBtn" onclick="window.calculate()">РАССЧИТАТЬ</button>
+  <div id="error" class="error"></div>
+</div>
+
+<div class="wrap" id="resultBlock" style="display:none;">
+  <div class="out-wrap">
+    <div class="out-head">
+      <span class="out-title">Положения планет</span>
+      <button class="copy-btn" id="copyBtn" onclick="window.copyText()">⎘ Копировать</button>
+    </div>
+    <textarea id="output" rows="35" readonly></textarea>
+  </div>
+</div>
+
+<div class="wrap footer">
+  <p><strong>Swiss Ephemeris (WebAssembly)</strong> — точность ±0.001°</p>
+</div>
+
+<script type="module">
+
+let swe = null;
+const SE_GREG_CAL = 1;
+const SEFLG_SPEED = 256;
+
+const BODIES = [
+  { key: 'sun',    id: 0,  name: 'Солнце' },
+  { key: 'moon',   id: 1,  name: 'Луна' },
+  { key: 'mercury', id: 2, name: 'Меркурий' },
+  { key: 'venus',  id: 3,  name: 'Венера' },
+  { key: 'mars',   id: 4,  name: 'Марс' },
+  { key: 'jupiter', id: 5, name: 'Юпитер' },
+  { key: 'saturn', id: 6,  name: 'Сатурн' },
+  { key: 'uranus', id: 7,  name: 'Уран' },
+  { key: 'neptune', id: 8, name: 'Нептун' },
+  { key: 'pluto',  id: 9,  name: 'Плутон' },
+  { key: 'north_node', id: 11, name: 'Сев. узел (Раху)' },
+  { key: 'lilith', id: 12, name: 'Лилит (Черная Луна)' },
+  { key: 'chiron', id: 15, name: 'Хирон' },
+];
+
+const SIGNS = ['Овен','Телец','Близнецы','Рак','Лев','Дева',
+               'Весы','Скорпион','Стрелец','Козерог','Водолей','Рыбы'];
+
+const ASPECT_DEFS = [
+  { name: 'Соединение',  angle: 0,   orb: 8, sym: '☌' },
+  { name: 'Секстиль',    angle: 60,  orb: 5, sym: '⚹' },
+  { name: 'Квадратура',  angle: 90,  orb: 7, sym: '□' },
+  { name: 'Тригон',      angle: 120, orb: 7, sym: '△' },
+  { name: 'Оппозиция',   angle: 180, orb: 8, sym: '☍' },
+];
+
+function norm(d) { let r = d % 360; return r < 0 ? r + 360 : r; }
+
+function fmtDeg(deg) {
+  const d = norm(deg);
+  const idx = Math.floor(d / 30), rem = d % 30;
+  const dd = Math.floor(rem), mm = Math.floor((rem % 1) * 60), ss = Math.floor(((rem % 1) * 60 % 1) * 60);
+  return `${dd}\u00B0${String(mm).padStart(2,'0')}'${String(ss).padStart(2,'0')}" ${SIGNS[idx]}`;
+}
+
+function sweCalcUt(jd, body) {
+  const fn = swe.calc_ut || swe.swe_calc_ut;
+  const r = fn.call(swe, jd, body, SEFLG_SPEED);
+  if (r && r.data && Array.isArray(r.data)) return r.data;
+  if (r && r.xx) return r.xx;
+  if (Array.isArray(r)) return r;
+  if (r && r.longitude !== undefined)
+    return [r.longitude, r.latitude || 0, r.distance || 0, r.longitudeSpeed || r.speedLong || 0];
+  if (r && typeof r === 'object') {
+    const vals = Object.values(r).filter(v => typeof v === 'number');
+    if (vals.length >= 4) return vals;
+  }
+  return [0, 0, 0, 0];
+}
+
+// Селена (Белая Луна)
+function calcSelena(jd) {
+  return norm(242.606 + 0.14084795 * (jd - 2451545.0));
+}
+
+async function initSWE() {
+  const el = document.getElementById('sweStatus');
+  try {
+    const mod = await import('https://cdn.jsdelivr.net/gh/prolaxu/swisseph-wasm@main/src/swisseph.js');
+    const SwissEph = mod.default || mod;
+    swe = new SwissEph();
+    await swe.initSwissEph();
+    el.textContent = 'готово'; el.className = 'status ok';
+  } catch(e) {
+    console.error('[SWE] Init failed:', e);
+    el.textContent = 'ошибка'; el.className = 'status err';
+  }
+}
+
+// Установить сегодняшнюю дату
+const today = new Date();
+document.getElementById('date').value = today.toISOString().split('T')[0];
+
+window.calculate = function() {
+  const errEl = document.getElementById('error');
+  errEl.textContent = '';
+  if (!swe) { errEl.textContent = 'Swiss Ephemeris ещё загружается...'; return; }
+
+  const dateVal = document.getElementById('date').value;
+  const timeVal = document.getElementById('time').value;
+  const tzOffset = parseInt(document.getElementById('tz').value);
+  if (!dateVal || !timeVal) { errEl.textContent = 'Укажите дату и время.'; return; }
+
+  const [year, month, day] = dateVal.split('-').map(Number);
+  const [hour, minute] = timeVal.split(':').map(Number);
+
+  // Перевод в UTC
+  const utcHour = hour - tzOffset + minute / 60;
+  let utcDay = day, utcMonth = month, utcYear = year;
+  let h = utcHour;
+  if (h < 0) { h += 24; utcDay--; }
+  if (h >= 24) { h -= 24; utcDay++; }
+  // Простая коррекция дня (без полного календаря — достаточно для JD)
+
+  const jdFn = swe.julday || swe.swe_julday;
+  const jd = jdFn.call(swe, utcYear, utcMonth, utcDay, h, SE_GREG_CAL);
+
+  const L = [];
+  const tzStr = (tzOffset >= 0 ? '+' : '') + tzOffset;
+
+  L.push('══════════ ТРАНЗИТЫ ══════════');
+  L.push('');
+  L.push(`Дата: ${dateVal}`);
+  L.push(`Время: ${timeVal} (UTC${tzStr})`);
+  L.push('');
+  L.push('────────── ПОЛОЖЕНИЯ ПЛАНЕТ ──────────');
+  L.push('');
+
+  const positions = [];
+
+  for (const b of BODIES) {
+    const data = sweCalcUt(jd, b.id);
+    const lon = norm(data[0]);
+    const speed = data[3] || 0;
+    const retro = speed < 0 ? ' (R)' : '';
+    positions.push({ name: b.name, lon, speed });
+    L.push(`${b.name}: ${fmtDeg(lon)}${retro}`);
+  }
+
+  // Южный узел
+  const rahuPos = positions.find(p => p.name === 'Сев. узел (Раху)');
+  if (rahuPos) {
+    const ketuLon = norm(rahuPos.lon + 180);
+    positions.push({ name: 'Юж. узел (Кету)', lon: ketuLon, speed: 0 });
+    L.push(`Юж. узел (Кету): ${fmtDeg(ketuLon)} (R)`);
+  }
+
+  // Селена
+  const selenaLon = calcSelena(jd);
+  positions.push({ name: 'Селена (Белая Луна)', lon: selenaLon, speed: 0 });
+  L.push(`Селена (Белая Луна): ${fmtDeg(selenaLon)}`);
+
+  // Аспекты между транзитными планетами
+  L.push('');
+  L.push('────────── АСПЕКТЫ ──────────');
+  L.push('');
+
+  const aspects = [];
+  for (let i = 0; i < positions.length; i++) {
+    for (let j = i + 1; j < positions.length; j++) {
+      let d = Math.abs(positions[i].lon - positions[j].lon);
+      if (d > 180) d = 360 - d;
+      for (const a of ASPECT_DEFS) {
+        const orb = Math.abs(d - a.angle);
+        if (orb <= a.orb) {
+          aspects.push({
+            p1: positions[i].name, p2: positions[j].name,
+            type: a.name, sym: a.sym, orb: orb.toFixed(2)
+          });
+        }
+      }
+    }
+  }
+
+  aspects.sort((a, b) => parseFloat(a.orb) - parseFloat(b.orb));
+
+  if (aspects.length === 0) L.push('Аспекты не обнаружены');
+  else aspects.forEach(a => L.push(`${a.p1} ${a.type} ${a.p2} (орб ${a.orb}°)`));
+
+  L.push('');
+  L.push('══════════════════════════════');
+
+  document.getElementById('output').value = L.join('\n');
+  document.getElementById('resultBlock').style.display = 'block';
+};
+
+window.copyText = function() {
+  const ta = document.getElementById('output');
+  ta.select();
+  navigator.clipboard.writeText(ta.value).then(() => {
+    const btn = document.getElementById('copyBtn');
+    btn.textContent = '✓ Скопировано'; btn.className = 'copy-btn copied';
+    setTimeout(() => { btn.textContent = '⎘ Копировать'; btn.className = 'copy-btn'; }, 2500);
+  });
+};
+
+initSWE();
+</script>
+</body>
+</html>

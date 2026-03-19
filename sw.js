@@ -1,7 +1,8 @@
-const CACHE_NAME = 'natal-chart-v1';
+const CACHE_NAME = 'natal-chart-v2';
 const ASSETS = [
   './',
   './index.html',
+  './transits.html',
   './manifest.json',
   'https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.30.1/moment.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/moment-timezone/0.5.45/moment-timezone-with-data.min.js',
