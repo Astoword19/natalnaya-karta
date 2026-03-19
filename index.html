@@ -158,10 +158,12 @@ async function initSWE() {
   try {
     const mod = await import('https://cdn.jsdelivr.net/gh/prolaxu/swisseph-wasm@main/src/swisseph.js');
     const SwissEph = mod.default || mod;
-    swe = await new SwissEph();
+    
+    swe = new SwissEph();
+    await swe.initSwissEph();
+    
     el.textContent = 'готово'; el.className = 'status ok';
-    console.log('[SWE] Initialized. Type:', typeof swe);
-    console.log('[SWE] Methods:', Object.getOwnPropertyNames(Object.getPrototypeOf(swe)).filter(k => k.startsWith('swe_')).join(', '));
+    console.log('[SWE] Initialized successfully');
   } catch(e) {
     console.error('[SWE] Init failed:', e);
     el.textContent = 'ошибка загрузки'; el.className = 'status err';
@@ -170,16 +172,17 @@ async function initSWE() {
 
 // Обёртки для Swiss Ephemeris
 function sweJulday(year, month, day, hour) {
-  return swe.swe_julday(year, month, day, hour, SE_GREG_CAL);
+  const fn = swe.julday || swe.swe_julday;
+  return fn.call(swe, year, month, day, hour, SE_GREG_CAL);
 }
 
 function sweCalcUt(jd, body) {
-  const r = swe.swe_calc_ut(jd, body, SEFLG_SPEED);
-  // Разные версии возвращают разный формат
-  if (r && r.xx) return r.xx;           // { xx: [lon, lat, dist, speed...] }
-  if (r && r.data) return r.data;       // { data: [lon, lat, dist, speed...] }
-  if (Array.isArray(r)) return r;       // [lon, lat, dist, speed...]
-  if (r && r.longitude !== undefined)   // { longitude, latitude, ... }
+  const fn = swe.calc_ut || swe.swe_calc_ut;
+  const r = fn.call(swe, jd, body, SEFLG_SPEED);
+  if (r && r.xx) return r.xx;
+  if (r && r.data) return r.data;
+  if (Array.isArray(r)) return r;
+  if (r && r.longitude !== undefined)
     return [r.longitude, r.latitude || 0, r.distance || 0, r.longitudeSpeed || r.speedLong || 0];
   console.warn('[SWE] Unknown calc_ut format:', r);
   return [0, 0, 0, 0];
@@ -187,7 +190,8 @@ function sweCalcUt(jd, body) {
 
 function sweHouses(jd, lat, lon, sys) {
   const hsys = typeof sys === 'string' ? sys.charCodeAt(0) : sys;
-  const r = swe.swe_houses(jd, lat, lon, hsys);
+  const fn = swe.houses || swe.swe_houses;
+  const r = fn.call(swe, jd, lat, lon, hsys);
   let cusps = [], ascmc = [];
   if (r) {
     cusps = r.cusps || r.house || r.houses || (r.data && (r.data.houses || r.data.cusps || r.data.house)) || [];
