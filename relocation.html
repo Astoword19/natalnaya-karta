@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Релокация → перестроение карты</title>
+<meta name="theme-color" content="#111110">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500&family=DM+Sans:wght@400;500;600&display=swap');
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #111110; color: #bbb8ac; font-family: 'DM Sans', sans-serif; font-size: 14px; min-height: 100vh; }
+  ::selection { background: #c9956b; color: #111; }
+  .wrap { max-width: 860px; margin: 0 auto; }
+  .header { border-bottom: 1px solid #2a2a26; background: linear-gradient(180deg, #1a1a18, #111110); }
+  .header-inner { padding: 26px 24px 22px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+  h1 { font-family: 'IBM Plex Mono', monospace; font-size: 20px; font-weight: 500; color: #e5e1d5; letter-spacing: 0.3px; }
+  .sub { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #555; margin-top: 4px; }
+  .status { font-family: 'IBM Plex Mono', monospace; font-size: 10px; padding: 5px 12px; border-radius: 3px; }
+  .status.ok { background: #1a2a1a; color: #4a4; }
+  .status.loading { background: #2a2a1a; color: #aa4; }
+  .status.err { background: #2a1a1a; color: #a44; }
+  .form-wrap { padding: 22px 24px 20px; border-bottom: 1px solid #1e1e1c; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 600px) { .grid { grid-template-columns: 1fr; } }
+  .full { grid-column: 1 / -1; }
+  .section-title { font-family: 'IBM Plex Mono', monospace; font-size: 11px; font-weight: 500; color: #c9956b; letter-spacing: 1.5px; text-transform: uppercase; margin-top: 18px; margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid #1e1e1c; }
+  label { font-family: 'IBM Plex Mono', monospace; font-size: 10px; font-weight: 500; color: #777; letter-spacing: 1.5px; text-transform: uppercase; display: block; margin-bottom: 6px; }
+  input, select { width: 100%; padding: 10px 14px; background: #1a1a18; border: 1px solid #2a2a26; border-radius: 4px; color: #e5e1d5; font-size: 14px; font-family: 'IBM Plex Mono', monospace; outline: none; -webkit-appearance: none; }
+  input:focus, select:focus { border-color: #c9956b; }
+  .row { display: flex; gap: 10px; }
+  .row > * { flex: 1; }
+  .btn { margin-top: 18px; width: 100%; padding: 13px; background: #c9956b; color: #111; border: none; border-radius: 4px; font-size: 13px; font-weight: 600; letter-spacing: 2px; cursor: pointer; font-family: 'IBM Plex Mono', monospace; }
+  .btn:hover { background: #b8844f; }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .nav-btn { padding: 9px 16px; background: #1a1a18; border: 1px solid #2a2a26; border-radius: 4px; color: #c9956b; font-size: 11px; font-weight: 500; font-family: 'IBM Plex Mono', monospace; text-decoration: none; }
+  .nav-btn:hover { border-color: #c9956b; }
+  .out-wrap { padding: 20px 24px 24px; }
+  .out-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 10px; }
+  .out-title { font-family: 'IBM Plex Mono', monospace; font-size: 11px; font-weight: 500; color: #777; letter-spacing: 0.5px; text-transform: uppercase; }
+  .copy-btn { padding: 9px 22px; border: none; border-radius: 4px; font-size: 13px; font-weight: 600; cursor: pointer; font-family: 'IBM Plex Mono', monospace; background: #c9956b; color: #111; }
+  .copy-btn:hover { background: #b8844f; }
+  .copy-btn.copied { background: #2d6a27; color: #fff; }
+  textarea { width: 100%; background: #0c0c0b; border: 1px solid #222; border-radius: 4px; color: #c8c4b8; font-family: 'IBM Plex Mono', monospace; font-size: 12px; line-height: 1.7; padding: 18px 20px; resize: vertical; outline: none; }
+  .error { color: #c44; margin-top: 10px; font-size: 12px; font-family: 'IBM Plex Mono', monospace; }
+  .footer { padding: 20px 24px 36px; font-size: 11px; color: #3a3a36; line-height: 1.7; font-family: 'IBM Plex Mono', monospace; border-top: 1px solid #1a1a18; }
+  .tz-hint { font-size: 10px; color: #555; margin-top: 4px; font-family: 'IBM Plex Mono', monospace; }
+  .autocomplete { position: relative; }
+  .autocomplete-items { position: absolute; border: 1px solid #2a2a26; border-top: none; z-index: 99; top: 100%; left: 0; right: 0; border-radius: 0 0 4px 4px; overflow-y: auto; max-height: 250px; box-shadow: 0 4px 12px rgba(0,0,0,0.5); }
+  .autocomplete-items div { padding: 10px 14px; cursor: pointer; background-color: #1a1a18; border-bottom: 1px solid #2a2a26; color: #e5e1d5; font-family: 'DM Sans', sans-serif; font-size: 13px; line-height: 1.4; }
+  .autocomplete-items div:hover { background-color: #c9956b; color: #111; }
+  .city-name { font-weight: 600; font-size: 14px; }
+  .city-region { font-size: 11px; opacity: 0.7; }
+  .city-tz { display: block; font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: #888; margin-top: 3px; }
+  .autocomplete-items div:hover .city-tz { color: #333; }
+  .gender-row { display: flex; gap: 12px; }
+  .gender-option { display: flex; align-items: center; cursor: pointer; }
+  .gender-option input[type="radio"] { display: none; }
+  .gender-label { display: inline-block; padding: 10px 28px; background: #1a1a18; border: 1px solid #2a2a26; border-radius: 4px; color: #777; font-family: 'IBM Plex Mono', monospace; font-size: 14px; font-weight: 500; transition: all .2s; }
+  .gender-option input[type="radio"]:checked + .gender-label { border-color: #c9956b; color: #e5e1d5; background: #1f1d18; }
+</style>
+</head>
+<body>
+
+<div class="header"><div class="wrap header-inner">
+  <div><h1>Релокация</h1><p class="sub">Swiss Ephemeris (WASM) + moment-timezone — перестроение карты на новый город</p></div>
+  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+    <span class="status loading" id="sweStatus">загрузка...</span>
+    <a href="index.html" class="nav-btn">← Натальная</a>
+    <a href="natal-transits.html" class="nav-btn">Н+Транзиты</a>
+    <a href="transits.html" class="nav-btn">Транзиты</a>
+    <a href="solar.html" class="nav-btn">Соляр</a>
+  </div>
+</div></div>
+
+<div class="wrap form-wrap">
+  <div class="grid">
+    <!-- ── Данные рождения ── -->
+    <div class="full"><div class="section-title">Данные рождения</div></div>
+    <div class="full"><label>Имя</label><input id="name" placeholder="Введите имя" autocomplete="off"></div>
+    <div><label>Дата рождения</label><input type="date" id="birthDate" value="1990-03-21"></div>
+    <div><label>Время рождения</label><input type="time" id="birthTime" value="14:30"></div>
+    <div>
+      <label>Город рождения</label>
+      <div class="autocomplete">
+        <input id="birthCity" placeholder="Начните вводить..." autocomplete="off">
+      </div>
+    </div>
+    <div>
+      <label>Пол</label>
+      <div class="gender-row">
+        <label class="gender-option"><input type="radio" name="gender" value="М" checked><span class="gender-label">М</span></label>
+        <label class="gender-option"><input type="radio" name="gender" value="Ж"><span class="gender-label">Ж</span></label>
+      </div>
+    </div>
+    <div class="full">
+      <div class="row">
+        <div><label>Широта</label><input id="birthLat" placeholder="55.7558"></div>
+        <div><label>Долгота</label><input id="birthLon" placeholder="37.6173"></div>
+      </div>
+    </div>
+    <div class="full">
+      <label>Часовой пояс (IANA)</label>
+      <input id="birthTz" placeholder="Europe/Moscow">
+    </div>
+
+    <!-- ── Город релокации ── -->
+    <div class="full"><div class="section-title">Город релокации (переезда)</div></div>
+    <div>
+      <label>Город релокации</label>
+      <div class="autocomplete">
+        <input id="relocCity" placeholder="Начните вводить..." autocomplete="off">
+      </div>
+    </div>
+    <div>
+      <div class="row">
+        <div><label>Широта</label><input id="relocLat" placeholder="40.7128"></div>
+        <div><label>Долгота</label><input id="relocLon" placeholder="-74.0060"></div>
+      </div>
+    </div>
+  </div>
+  <button class="btn" id="calcBtn" onclick="window.calc()">РАССЧИТАТЬ</button>
+  <div id="error" class="error"></div>
+</div>
+
+<div class="wrap" id="resultBlock" style="display:none;">
+  <div class="out-wrap">
+
+    <!-- Diagnostic info bar -->
+    <div id="diagBar" style="padding:14px 0 10px;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#555;line-height:1.8;border-bottom:1px solid #1a1a18;margin-bottom:12px;"></div>
+
+    <div class="out-head">
+      <span class="out-title">Полный вывод</span>
+      <button class="copy-btn" id="copyBtn" onclick="window.copyText()">⎘ Копировать</button>
+    </div>
+    <textarea id="output" rows="60" readonly></textarea>
+  </div>
+</div>
+
+<div class="wrap footer">
+  <p><strong>Swiss Ephemeris (WebAssembly)</strong> — точность ±0.001°</p>
+  <p><strong>moment-timezone</strong> — историческая база часовых поясов IANA/Olson</p>
+  <p style="margin-top:6px;">Релокация: те же UTC-данные рождения, но дома пересчитаны на координаты нового города.</p>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.30.1/moment.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/moment-timezone/0.5.45/moment-timezone-with-data.min.js"></script>
+
+<script type="module">
+
+let swe = null;
+const SE_SUN = 0, SE_MOON = 1, SE_MERCURY = 2, SE_VENUS = 3, SE_MARS = 4;
+const SE_JUPITER = 5, SE_SATURN = 6, SE_URANUS = 7, SE_NEPTUNE = 8, SE_PLUTO = 9;
+const SE_TRUE_NODE = 11, SE_MEAN_APOG = 12, SE_CHIRON = 15;
+const SEFLG_SPEED = 256, SE_GREG_CAL = 1;
+
+const SE_BODIES = {
+  sun: SE_SUN, moon: SE_MOON, mercury: SE_MERCURY, venus: SE_VENUS,
+  mars: SE_MARS, jupiter: SE_JUPITER, saturn: SE_SATURN, uranus: SE_URANUS,
+  neptune: SE_NEPTUNE, pluto: SE_PLUTO, north_node: SE_TRUE_NODE,
+  lilith: SE_MEAN_APOG, chiron: SE_CHIRON
+};
+
+const SIGNS = ['Овен','Телец','Близнецы','Рак','Лев','Дева',
+               'Весы','Скорпион','Стрелец','Козерог','Водолей','Рыбы'];
+
+const PLANET_NAMES = {
+  sun:'Солнце', moon:'Луна', mercury:'Меркурий', venus:'Венера',
+  mars:'Марс', jupiter:'Юпитер', saturn:'Сатурн', uranus:'Уран',
+  neptune:'Нептун', pluto:'Плутон', north_node:'Сев.узел',
+  south_node:'Юж.узел', lilith:'Лилит', selena:'Селена',
+  chiron:'Хирон', vertex:'Вертекс', pars_fortuna:'Парс Фортуны',
+  asc:'AC', mc:'MC',
+};
+
+const PLANET_NAMES_FULL = {
+  sun:'Солнце', moon:'Луна', mercury:'Меркурий', venus:'Венера',
+  mars:'Марс', jupiter:'Юпитер', saturn:'Сатурн', uranus:'Уран',
+  neptune:'Нептун', pluto:'Плутон', north_node:'Сев. узел (Раху)',
+  south_node:'Юж. узел (Кету)', lilith:'Лилит (Черная Луна)',
+  selena:'Селена (Белая Луна)', chiron:'Хирон', vertex:'Вертекс',
+  pars_fortuna:'Парс Фортуны', asc:'Асцендент', mc:'Середина Неба',
+};
+
+const PLANET_ORDER = [
+  'sun','moon','mercury','venus','mars','jupiter',
+  'saturn','uranus','neptune','pluto',
+  'north_node','south_node','lilith','selena','chiron'
+];
+
+const ASPECT_DEFS = [
+  { name: 'Соединение', sym: '☌', angle: 0,   orb: 3 },
+  { name: 'Полусекстиль', sym: '⚺', angle: 30, orb: 1 },
+  { name: 'Секстиль',   sym: '⚹', angle: 60,  orb: 3 },
+  { name: 'Квадратура',  sym: '□', angle: 90,  orb: 3 },
+  { name: 'Тригон',      sym: '△', angle: 120, orb: 3 },
+  { name: 'Квиконс',     sym: '⚻', angle: 150, orb: 2 },
+  { name: 'Оппозиция',   sym: '☍', angle: 180, orb: 3 },
+];
+
+// ── Натальные аспекты (более широкие орбы, как в index.html) ──
+const NATAL_ASPECT_DEFS = [
+  { name: 'Соединение',  angle: 0,   orb: 8 },
+  { name: 'Секстиль',    angle: 60,  orb: 6 },
+  { name: 'Квадратура',  angle: 90,  orb: 8 },
+  { name: 'Тригон',      angle: 120, orb: 8 },
+  { name: 'Квиконс',     angle: 150, orb: 4 },
+  { name: 'Оппозиция',   angle: 180, orb: 8 },
+];
+
+function norm(d) { let r = d % 360; return r < 0 ? r + 360 : r; }
+
+function degToSign(deg) {
+  const d = norm(deg), idx = Math.floor(d / 30), rem = d % 30;
+  return { sign: SIGNS[idx], signIndex: idx, degree: Math.floor(rem),
+    minute: Math.floor((rem % 1) * 60), second: Math.floor(((rem % 1) * 60 % 1) * 60), absolute: d };
+}
+
+function fmtDeg(deg) {
+  if (isNaN(deg)) return '—';
+  const i = degToSign(deg);
+  return `${i.degree}\u00B0${String(i.minute).padStart(2,'0')}'${String(i.second).padStart(2,'0')}" ${i.sign}`;
+}
+
+function fmtDegShort(deg) {
+  if (isNaN(deg)) return '—';
+  const i = degToSign(deg);
+  return `${i.degree}\u00B0${String(i.minute).padStart(2,'0')}' ${i.sign}`;
+}
+
+function houseOf(deg, cusps) {
+  if (!cusps || cusps.length < 12 || isNaN(deg)) return 1;
+  const d = norm(deg);
+  for (let i = 0; i < 12; i++) {
+    const s = cusps[i], e = cusps[(i + 1) % 12];
+    if (s > e) { if (d >= s || d < e) return i + 1; }
+    else       { if (d >= s && d < e) return i + 1; }
+  }
+  return 1;
+}
+
+function sweJulday(y, m, d, h) { return (swe.julday || swe.swe_julday).call(swe, y, m, d, h, SE_GREG_CAL); }
+
+function sweCalcUt(jd, body) {
+  const r = (swe.calc_ut || swe.swe_calc_ut).call(swe, jd, body, SEFLG_SPEED);
+  if (r && r.data && Array.isArray(r.data)) return r.data;
+  if (r && r.xx) return r.xx;
+  if (Array.isArray(r)) return r;
+  if (r && r.longitude !== undefined) return [r.longitude, r.latitude||0, r.distance||0, r.longitudeSpeed||0];
+  if (r && typeof r === 'object') { const v = Object.values(r).filter(x => typeof x === 'number'); if (v.length >= 4) return v; }
+  return [0, 0, 0, 0];
+}
+
+function sweHouses(jd, lat, lon) {
+  const r = (swe.houses || swe.swe_houses).call(swe, jd, lat, lon, 'P'.charCodeAt(0));
+  let cusps = [], ascmc = [];
+  if (r) {
+    cusps = r.cusps || r.house || r.houses || (r.data && (r.data.houses || r.data.cusps || r.data.house)) || [];
+    ascmc = r.ascmc || r.points || (r.data && (r.data.ascmc || r.data.points)) || [];
+    if (Array.isArray(r) && r.length === 2) { cusps = r[0]; ascmc = r[1]; }
+  }
+  if (cusps.length === 13) cusps = cusps.slice(1);
+  return { cusps, ascmc };
+}
+
+function calcSelena(jd) { return norm(242.606 + 0.14084795 * (jd - 2451545.0)); }
+
+function calcPositions(jd) {
+  const pos = {};
+  for (const [name, bodyCode] of Object.entries(SE_BODIES)) {
+    const data = sweCalcUt(jd, bodyCode);
+    pos[name] = { longitude: norm(data[0]), speed: data[3] || 0, retrograde: (data[3] || 0) < 0 };
+  }
+  if (pos.north_node) {
+    pos.north_node.retrograde = true;
+    pos.south_node = { longitude: norm(pos.north_node.longitude + 180), retrograde: true, speed: 0 };
+  }
+  pos.selena = { longitude: calcSelena(jd), retrograde: false, speed: 0 };
+  return pos;
+}
+
+function calcAllHouses(jd, lat, lon) {
+  const { cusps, ascmc } = sweHouses(jd, lat, lon);
+  const asc = (ascmc[0] !== undefined && !isNaN(ascmc[0])) ? ascmc[0] : 0;
+  const mc = (ascmc[1] !== undefined && !isNaN(ascmc[1])) ? ascmc[1] : 0;
+  const vertex = (ascmc[3] !== undefined && !isNaN(ascmc[3])) ? ascmc[3] : 0;
+  let fc = cusps;
+  if (fc.length < 12 && asc) { fc = []; for (let i = 0; i < 12; i++) fc.push(norm(asc + i * 30)); }
+  return { cusps: fc, asc: norm(asc), mc: norm(mc), vertex: norm(vertex) };
+}
+
+function localToUTC(year, month, day, hour, minute, tz) {
+  const ds = `${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')} ${String(hour).padStart(2,'0')}:${String(minute).padStart(2,'0')}`;
+  const cleanTz = String(tz).trim();
+  let loc;
+  const isOff = /^[-+]?\d+(\.\d+)?$/.test(cleanTz) || /^[-+]?\d{1,2}:\d{2}$/.test(cleanTz);
+  if (isOff) loc = moment(ds, 'YYYY-MM-DD HH:mm').utcOffset(parseFloat(cleanTz), true);
+  else loc = moment.tz(ds, 'YYYY-MM-DD HH:mm', cleanTz);
+  if (!loc.isValid()) throw new Error('Невалидная дата/пояс');
+  const off = loc.utcOffset() / 60;
+  let abbr = loc.format('z');
+  if (isOff) abbr = 'UTC' + (off >= 0 ? '+' : '') + off;
+  const u = loc.clone().utc();
+  return { year: u.year(), month: u.month()+1, day: u.date(), hour: u.hour(), minute: u.minute(), second: u.second(), utcOffset: off, tzAbbr: abbr };
+}
+
+// ── Аспекты между релокационными углами и натальными планетами ──
+function calcRelocAspects(relocHouses, natalPos) {
+  const result = [];
+  const angles = [
+    { key: 'reloc_asc', name: 'AC релокации', lon: relocHouses.asc },
+    { key: 'reloc_mc',  name: 'MC релокации', lon: relocHouses.mc },
+    { key: 'reloc_dsc', name: 'DSC релокации', lon: norm(relocHouses.asc + 180) },
+    { key: 'reloc_ic',  name: 'IC релокации',  lon: norm(relocHouses.mc + 180) },
+    { key: 'reloc_vertex', name: 'Вертекс релокации', lon: relocHouses.vertex },
+  ];
+
+  const nKeys = [...PLANET_ORDER, 'pars_fortuna', 'asc', 'mc'];
+
+  for (const angle of angles) {
+    if (isNaN(angle.lon)) continue;
+    for (const nk of nKeys) {
+      if (!natalPos[nk] || isNaN(natalPos[nk].longitude)) continue;
+      let d = Math.abs(angle.lon - natalPos[nk].longitude);
+      if (d > 180) d = 360 - d;
+      for (const a of ASPECT_DEFS) {
+        const o = Math.abs(d - a.angle);
+        if (o <= a.orb) {
+          result.push({
+            relocAngle: angle.name, relocAngleKey: angle.key,
+            natal: nk, type: a.name, sym: a.sym,
+            orb: o.toFixed(2), orbNum: o
+          });
+        }
+      }
+    }
+  }
+  return result.sort((a, b) => a.orbNum - b.orbNum);
+}
+
+// ── Инициализация SWE ──
+async function initSWE() {
+  const el = document.getElementById('sweStatus');
+  try {
+    const mod = await import('https://cdn.jsdelivr.net/gh/prolaxu/swisseph-wasm@main/src/swisseph.js');
+    const SwissEph = mod.default || mod;
+    swe = new SwissEph();
+    await swe.initSwissEph();
+    el.textContent = 'готово'; el.className = 'status ok';
+  } catch(e) {
+    console.error('[SWE] Init failed:', e);
+    el.textContent = 'ошибка'; el.className = 'status err';
+  }
+}
+
+// ── РАСЧЁТ ──
+window.calc = function() {
+  const errEl = document.getElementById('error');
+  errEl.textContent = '';
+  if (!swe) { errEl.textContent = 'Swiss Ephemeris ещё загружается...'; return; }
+  const btn = document.getElementById('calcBtn');
+  btn.disabled = true; btn.textContent = 'РАСЧЁТ...';
+
+  try {
+    const bDate = document.getElementById('birthDate').value;
+    const bTime = document.getElementById('birthTime').value;
+    const bLat = parseFloat(document.getElementById('birthLat').value);
+    const bLon = parseFloat(document.getElementById('birthLon').value);
+    const bTz = document.getElementById('birthTz').value;
+    const rLat = parseFloat(document.getElementById('relocLat').value);
+    const rLon = parseFloat(document.getElementById('relocLon').value);
+    const gender = document.querySelector('input[name="gender"]:checked').value;
+    const nameVal = document.getElementById('name').value;
+    const birthCityVal = document.getElementById('birthCity').value;
+    const relocCityVal = document.getElementById('relocCity').value;
+
+    if (!bDate || !bTime || !bLat || !bLon || !bTz)
+      throw new Error('Заполните все поля рождения (дата, время, город, пояс).');
+    if (isNaN(rLat) || isNaN(rLon) || !rLat || !rLon)
+      throw new Error('Укажите город релокации (выберите из списка).');
+
+    const [bYear, bMonth, bDay] = bDate.split('-').map(Number);
+    const [bHour, bMin] = bTime.split(':').map(Number);
+
+    // ── Шаг 1. Общий UTC и JD (один для обеих карт) ──
+    const uBirth = localToUTC(bYear, bMonth, bDay, bHour, bMin, bTz);
+    const jd = sweJulday(uBirth.year, uBirth.month, uBirth.day, uBirth.hour + uBirth.minute/60 + uBirth.second/3600);
+
+    // ── Шаг 2. Положения планет (одинаковые для натала и релокации) ──
+    const positions = calcPositions(jd);
+
+    // ── Шаг 3. Натальные дома (по координатам рождения) ──
+    const natalHouses = calcAllHouses(jd, bLat, bLon);
+
+    // ── Шаг 4. Релокационные дома (по координатам нового города, тот же JD) ──
+    const relocHouses = calcAllHouses(jd, rLat, rLon);
+
+    // ── Парс Фортуны (натальный) ──
+    if (positions.sun && positions.moon && !isNaN(natalHouses.asc)) {
+      const sunH = houseOf(positions.sun.longitude, natalHouses.cusps);
+      const isDay = sunH >= 7 && sunH <= 12;
+      positions.pars_fortuna_natal = {
+        longitude: isDay
+          ? norm(natalHouses.asc + positions.moon.longitude - positions.sun.longitude)
+          : norm(natalHouses.asc + positions.sun.longitude - positions.moon.longitude),
+        retrograde: false, speed: 0
+      };
+    }
+
+    // ── Парс Фортуны (релокационный) ──
+    let relocParsFortunaLon = NaN;
+    if (positions.sun && positions.moon && !isNaN(relocHouses.asc)) {
+      const sunH = houseOf(positions.sun.longitude, relocHouses.cusps);
+      const isDay = sunH >= 7 && sunH <= 12;
+      relocParsFortunaLon = isDay
+        ? norm(relocHouses.asc + positions.moon.longitude - positions.sun.longitude)
+        : norm(relocHouses.asc + positions.sun.longitude - positions.moon.longitude);
+    }
+
+    // Вертекс (натальный и релокационный)
+    const natalVertexLon = natalHouses.vertex;
+    const relocVertexLon = relocHouses.vertex;
+
+    // ── Собираем natalPos для аспектов ──
+    const natalPos = {};
+    for (const k of [...PLANET_ORDER, 'pars_fortuna']) {
+      if (k === 'pars_fortuna') {
+        if (positions.pars_fortuna_natal) natalPos.pars_fortuna = positions.pars_fortuna_natal;
+      } else if (positions[k]) {
+        natalPos[k] = positions[k];
+      }
+    }
+    natalPos.asc = { longitude: natalHouses.asc, isAngle: true };
+    natalPos.mc = { longitude: natalHouses.mc, isAngle: true };
+    natalPos.vertex = { longitude: natalVertexLon, isAngle: true };
+
+    // ── Шаг 5. Аспекты: релокационные углы → натальные планеты ──
+    const relocAsp = calcRelocAspects(relocHouses, natalPos);
+
+    // ── ВЫВОД ──
+    const L = [];
+    L.push('══════════ РЕЛОКАЦИЯ ══════════');
+    L.push('');
+    if (nameVal) L.push('Имя: ' + nameVal);
+    if (gender) L.push('Пол: ' + gender);
+    L.push('Дата рождения: ' + bDate + ', ' + bTime + ' (' + uBirth.tzAbbr + ')');
+    L.push('Место рождения: ' + (birthCityVal || '—') + ' (' + bLat.toFixed(4) + '°, ' + bLon.toFixed(4) + '°)');
+    L.push('Город релокации: ' + (relocCityVal || '—') + ' (' + rLat.toFixed(4) + '°, ' + rLon.toFixed(4) + '°)');
+    L.push('');
+    L.push('UTC: ' + uBirth.year + '-' + String(uBirth.month).padStart(2,'0') + '-' + String(uBirth.day).padStart(2,'0') + ' ' + String(uBirth.hour).padStart(2,'0') + ':' + String(uBirth.minute).padStart(2,'0'));
+    L.push('JD: ' + jd.toFixed(6));
+
+    // ── Планеты: одинаковые позиции, разные дома ──
+    L.push('');
+    L.push('────────── ПЛАНЕТЫ (натал → релокация) ──────────');
+    L.push('');
+    const hdr = 'Планета          | Положение             | Нат.дом | Рел.дом';
+    L.push(hdr);
+    L.push('-'.repeat(hdr.length));
+
+    const allKeys = [...PLANET_ORDER];
+    for (const k of allKeys) {
+      const p = positions[k];
+      if (!p || isNaN(p.longitude)) continue;
+      const name = (PLANET_NAMES_FULL[k] || k).padEnd(17);
+      const posStr = fmtDeg(p.longitude) + (p.retrograde ? ' R' : '');
+      const nH = String(houseOf(p.longitude, natalHouses.cusps));
+      const rH = String(houseOf(p.longitude, relocHouses.cusps));
+      const moved = nH !== rH ? ' ←' : '';
+      L.push(`${name}| ${posStr.padEnd(22)}| ${nH.padEnd(8)}| ${rH}${moved}`);
+    }
+
+    // Парс Фортуны
+    if (positions.pars_fortuna_natal && !isNaN(relocParsFortunaLon)) {
+      const nPF = positions.pars_fortuna_natal.longitude;
+      L.push('');
+      L.push('Парс Фортуны (натал):      ' + fmtDeg(nPF) + ', дом ' + houseOf(nPF, natalHouses.cusps));
+      L.push('Парс Фортуны (релокация):  ' + fmtDeg(relocParsFortunaLon) + ', дом ' + houseOf(relocParsFortunaLon, relocHouses.cusps));
+    }
+
+    // Вертекс
+    L.push('');
+    L.push('Вертекс (натал):      ' + fmtDeg(natalVertexLon) + ', дом ' + houseOf(natalVertexLon, natalHouses.cusps));
+    L.push('Вертекс (релокация):  ' + fmtDeg(relocVertexLon) + ', дом ' + houseOf(relocVertexLon, relocHouses.cusps));
+
+    // ── Куспиды домов: сравнение ──
+    L.push('');
+    L.push('────────── КУСПИДЫ ДОМОВ ──────────');
+    L.push('');
+    const hdr2 = 'Дом       | Натал                  | Релокация';
+    L.push(hdr2);
+    L.push('-'.repeat(hdr2.length));
+
+    for (let i = 0; i < 12; i++) {
+      let label = String(i + 1);
+      if (i === 0) label = '1 (AC)';
+      else if (i === 3) label = '4 (IC)';
+      else if (i === 6) label = '7 (DSC)';
+      else if (i === 9) label = '10 (MC)';
+      const nC = fmtDeg(natalHouses.cusps[i]);
+      const rC = fmtDeg(relocHouses.cusps[i]);
+      L.push(`${label.padEnd(10)}| ${nC.padEnd(23)}| ${rC}`);
+    }
+
+    // ── Основные углы: сравнение ──
+    L.push('');
+    L.push('────────── ОСНОВНЫЕ УГЛЫ ──────────');
+    L.push('');
+    L.push('ASC  натал: ' + fmtDeg(natalHouses.asc) + '    →  релокация: ' + fmtDeg(relocHouses.asc));
+    L.push('MC   натал: ' + fmtDeg(natalHouses.mc) + '    →  релокация: ' + fmtDeg(relocHouses.mc));
+    L.push('DSC  натал: ' + fmtDeg(norm(natalHouses.asc + 180)) + '    →  релокация: ' + fmtDeg(norm(relocHouses.asc + 180)));
+    L.push('IC   натал: ' + fmtDeg(norm(natalHouses.mc + 180)) + '    →  релокация: ' + fmtDeg(norm(relocHouses.mc + 180)));
+
+    // ── Аспекты: релокационные углы → натальные планеты ──
+    L.push('');
+    L.push('────────── АСПЕКТЫ (углы релокации → натальные планеты, ≤3°) ──────────');
+    L.push('');
+
+    if (!relocAsp.length) {
+      L.push('Аспектов не обнаружено');
+    } else {
+      for (const a of relocAsp) {
+        const nName = PLANET_NAMES_FULL[a.natal] || a.natal;
+        const nH = natalPos[a.natal] ? houseOf(natalPos[a.natal].longitude, natalHouses.cusps) : '';
+        const hStr = nH ? ' (нат.дом ' + nH + ')' : '';
+        L.push(`${a.relocAngle} ${a.sym} ${a.type} ${nName}${hStr} — орб ${a.orb}°`);
+      }
+    }
+
+    // ── Планеты, сменившие дом ──
+    L.push('');
+    L.push('────────── СМЕНА ДОМОВ ──────────');
+    L.push('');
+
+    let movedCount = 0;
+    for (const k of allKeys) {
+      const p = positions[k];
+      if (!p || isNaN(p.longitude)) continue;
+      const nH = houseOf(p.longitude, natalHouses.cusps);
+      const rH = houseOf(p.longitude, relocHouses.cusps);
+      if (nH !== rH) {
+        const name = PLANET_NAMES_FULL[k] || k;
+        L.push(`${name}: дом ${nH} → дом ${rH}`);
+        movedCount++;
+      }
+    }
+    // Парс Фортуны смена
+    if (positions.pars_fortuna_natal && !isNaN(relocParsFortunaLon)) {
+      const nH = houseOf(positions.pars_fortuna_natal.longitude, natalHouses.cusps);
+      const rH = houseOf(relocParsFortunaLon, relocHouses.cusps);
+      if (nH !== rH) {
+        L.push(`Парс Фортуны: дом ${nH} → дом ${rH}`);
+        movedCount++;
+      }
+    }
+    // Вертекс смена
+    {
+      const nH = houseOf(natalVertexLon, natalHouses.cusps);
+      const rH = houseOf(relocVertexLon, relocHouses.cusps);
+      if (nH !== rH) {
+        L.push(`Вертекс: дом ${nH} → дом ${rH}`);
+        movedCount++;
+      }
+    }
+
+    if (movedCount === 0) L.push('Ни одна планета не сменила дом.');
+
+    // ── Диагностика ──
+    L.push('');
+    L.push('────────── ДИАГНОСТИКА ──────────');
+    L.push('');
+    L.push(`Ввод: ${bDate} ${bTime}, пояс "${bTz}" → ${uBirth.tzAbbr} (UTC${uBirth.utcOffset >= 0 ? '+' : ''}${uBirth.utcOffset})`);
+    L.push(`UTC: ${uBirth.year}-${String(uBirth.month).padStart(2,'0')}-${String(uBirth.day).padStart(2,'0')} ${String(uBirth.hour).padStart(2,'0')}:${String(uBirth.minute).padStart(2,'0')}:${String(uBirth.second).padStart(2,'0')}`);
+    L.push(`JD: ${jd.toFixed(6)}`);
+    L.push(`Координаты рождения: ${bLat.toFixed(4)}°, ${bLon.toFixed(4)}°` + (birthCityVal ? ` (${birthCityVal})` : ''));
+    L.push(`Координаты релокации: ${rLat.toFixed(4)}°, ${rLon.toFixed(4)}°` + (relocCityVal ? ` (${relocCityVal})` : ''));
+    L.push('');
+    L.push(`Натал  AC: ${fmtDeg(natalHouses.asc)}, MC: ${fmtDeg(natalHouses.mc)}`);
+    L.push(`Релок  AC: ${fmtDeg(relocHouses.asc)}, MC: ${fmtDeg(relocHouses.mc)}`);
+
+    L.push('');
+    L.push('══════════════════════════════════════');
+
+    document.getElementById('output').value = L.join('\n');
+    document.getElementById('resultBlock').style.display = 'block';
+
+    // Diagnostic bar
+    const dBar = document.getElementById('diagBar');
+    const ub = uBirth;
+    dBar.innerHTML = [
+      `<b>UTC:</b> ${ub.year}-${String(ub.month).padStart(2,'0')}-${String(ub.day).padStart(2,'0')} ${String(ub.hour).padStart(2,'0')}:${String(ub.minute).padStart(2,'0')} | JD: ${jd.toFixed(4)} | пояс: ${bTz} → ${ub.tzAbbr} (UTC${ub.utcOffset>=0?'+':''}${ub.utcOffset})`,
+      `<b>НАТАЛ:</b> ${bLat.toFixed(4)}°, ${bLon.toFixed(4)}° ${birthCityVal ? '(' + esc(birthCityVal) + ')' : ''} | AC: ${fmtDeg(natalHouses.asc)} | MC: ${fmtDeg(natalHouses.mc)}`,
+      `<b>РЕЛОКАЦИЯ:</b> ${rLat.toFixed(4)}°, ${rLon.toFixed(4)}° ${relocCityVal ? '(' + esc(relocCityVal) + ')' : ''} | AC: ${fmtDeg(relocHouses.asc)} | MC: ${fmtDeg(relocHouses.mc)}`,
+    ].join('<br>');
+
+  } catch(e) {
+    console.error(e);
+    errEl.textContent = e.message;
+  } finally {
+    btn.disabled = false; btn.textContent = 'РАССЧИТАТЬ';
+  }
+};
+
+function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+window.copyText = function() {
+  const ta = document.getElementById('output');
+  ta.select();
+  navigator.clipboard.writeText(ta.value).then(() => {
+    const btn = document.getElementById('copyBtn');
+    btn.textContent = '✓ Скопировано'; btn.className = 'copy-btn copied';
+    setTimeout(() => { btn.textContent = '⎘ Копировать'; btn.className = 'copy-btn'; }, 2500);
+  });
+};
+
+// ── Поиск города (универсальный) ──
+function setupCitySearch(inputId, latId, lonId, tzId) {
+  const input = document.getElementById(inputId);
+  let tid;
+  input.addEventListener('input', function() {
+    clearTimeout(tid); closeAllLists();
+    const val = this.value; if (!val || val.length < 2) return;
+    tid = setTimeout(async () => {
+      try {
+        const resp = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(val)}&count=5&language=ru&format=json`);
+        const data = await resp.json(); if (!data.results) return;
+        const list = document.createElement('DIV'); list.className = 'autocomplete-items';
+        input.parentNode.appendChild(list);
+        data.results.forEach(city => {
+          const item = document.createElement('DIV');
+          const region = city.admin1 ? `, ${city.admin1}` : '';
+          const country = city.country ? ` (${city.country})` : '';
+          const tz = city.timezone || 'UTC';
+          item.innerHTML = `<span class="city-name">${city.name}</span><span class="city-region">${region}${country}</span><span class="city-tz">${tz}</span>`;
+          item.addEventListener('click', () => {
+            input.value = city.name;
+            document.getElementById(latId).value = city.latitude;
+            document.getElementById(lonId).value = city.longitude;
+            if (tzId) document.getElementById(tzId).value = tz;
+            closeAllLists();
+          });
+          list.appendChild(item);
+        });
+      } catch(e) { console.error(e); }
+    }, 400);
+  });
+}
+function closeAllLists() { document.querySelectorAll('.autocomplete-items').forEach(el => el.remove()); }
+document.addEventListener('click', closeAllLists);
+
+setupCitySearch('birthCity', 'birthLat', 'birthLon', 'birthTz');
+setupCitySearch('relocCity', 'relocLat', 'relocLon', null);
+
+initSWE();
+</script>
+</body>
+</html>
