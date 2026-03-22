@@ -291,22 +291,22 @@ const PLANET_ORDER = [
 ];
 
 const ASPECT_DEFS = [
-  { name: 'Соединение', sym: '☌', angle: 0,   orb: 1.5 },
+  { name: 'Соединение', sym: '☌', angle: 0,   orb: 1 },
   { name: 'Полусекстиль', sym: '⚺', angle: 30, orb: 1 },
-  { name: 'Секстиль',   sym: '⚹', angle: 60,  orb: 1.5 },
-  { name: 'Квадратура',  sym: '□', angle: 90,  orb: 1.5 },
-  { name: 'Тригон',      sym: '△', angle: 120, orb: 1.5 },
+  { name: 'Секстиль',   sym: '⚹', angle: 60,  orb: 1 },
+  { name: 'Квадратура',  sym: '□', angle: 90,  orb: 1 },
+  { name: 'Тригон',      sym: '△', angle: 120, orb: 1 },
   { name: 'Квиконс',     sym: '⚻', angle: 150, orb: 1 },
-  { name: 'Оппозиция',   sym: '☍', angle: 180, orb: 1.5 },
+  { name: 'Оппозиция',   sym: '☍', angle: 180, orb: 1 },
 ];
 
 // Множитель орба по скорости транзитной планеты
 // Медленные получают больший орб, быстрые — стандартный
 const ORB_MULTIPLIER = {
-  pluto: 2.5, neptune: 2.5, uranus: 2.2,
-  chiron: 1.8, saturn: 1.8, jupiter: 1.6,
-  mars: 1.0, venus: 1.0, sun: 1.0, mercury: 1.0, moon: 0.8,
-  north_node: 1.5, south_node: 1.5, lilith: 1.2, selena: 1.2
+  pluto: 1.0, neptune: 1.0, uranus: 1.0,
+  chiron: 1.0, saturn: 1.0, jupiter: 1.0,
+  mars: 1.0, venus: 1.0, sun: 1.0, mercury: 1.0, moon: 1.0,
+  north_node: 1.0, south_node: 1.0, lilith: 1.0, selena: 1.0
 };
 
 function norm(d) { let r = d % 360; return r < 0 ? r + 360 : r; }
@@ -644,7 +644,7 @@ function renderComparisonTable(natalPos, transitPos, natalHouses, transitHouses,
 function renderAspectsTable(crossAsp, natalPos, natalHouses) {
   const el = document.getElementById('aspectsTable');
   if (!crossAsp.length) {
-    el.innerHTML = '<p style="padding:20px;color:#666;font-family:IBM Plex Mono,monospace;font-size:12px;">Аспектов с орбом ≤3° не обнаружено.</p>';
+    el.innerHTML = '<p style="padding:20px;color:#666;font-family:IBM Plex Mono,monospace;font-size:12px;">Аспектов с орбом ≤1° не обнаружено.</p>';
     return;
   }
 
@@ -746,7 +746,7 @@ function renderTextOutput(natalPos, transitPos, natalHouses, transitHouses, hasL
   }
 
   // Аспекты
-  L.push(''); L.push('────────── КРОСС-АСПЕКТЫ (ТРАНЗИТ → НАТАЛ, ≤3°) ──────────'); L.push('');
+  L.push(''); L.push('────────── КРОСС-АСПЕКТЫ (ТРАНЗИТ → НАТАЛ, ≤1°) ──────────'); L.push('');
   if (!crossAsp.length) L.push('Аспектов не обнаружено');
   else crossAsp.forEach(a => {
     const tName = PLANET_NAMES_FULL[a.transit] || a.transit;
