@@ -158,7 +158,30 @@
       <input id="transitTz" placeholder="Europe/Moscow">
     </div>
   </div>
-  <button class="btn" id="calcBtn" onclick="window.calc()">РАССЧИТАТЬ</button>
+
+  <!-- ── Режим расчёта ── -->
+  <div class="grid" style="margin-top:18px;">
+    <div class="full"><div class="section-title">Режим расчёта</div></div>
+    <div class="full">
+      <div class="gender-row">
+        <label class="gender-option"><input type="radio" name="calcMode" value="single" checked onchange="document.getElementById('periodBlock').style.display='none'"><span class="gender-label">На одну дату</span></label>
+        <label class="gender-option"><input type="radio" name="calcMode" value="period" onchange="document.getElementById('periodBlock').style.display='block'"><span class="gender-label">На период</span></label>
+      </div>
+    </div>
+    <div class="full" id="periodBlock" style="display:none; margin-top:14px;">
+      <div class="row">
+        <div><label>Начало периода</label><input type="date" id="periodStart"></div>
+        <div><label>Конец периода</label><input type="date" id="periodEnd"></div>
+      </div>
+      <div style="margin-top:10px;">
+        <label style="display:flex; align-items:center; color:#e5e1d5; font-size:13px; cursor:pointer; font-family:'IBM Plex Mono',monospace;">
+          <input type="checkbox" id="excludeMoon" style="width:auto; margin-right:8px;"> Без транзитной Луны (для длинных периодов)
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <button class="btn" id="calcBtn" onclick="window.runCalc()">РАССЧИТАТЬ</button>
   <div id="error" class="error"></div>
 </div>
 
@@ -226,6 +249,25 @@ const PLANET_NAMES_FULL = {
   south_node:'Юж. узел (Кету)', lilith:'Лилит (Черная Луна)',
   selena:'Селена (Белая Луна)', chiron:'Хирон', vertex:'Вертекс',
   pars_fortuna:'Парс Фортуны', asc:'Асцендент', mc:'Середина Неба',
+};
+
+const PLANET_NAMES_INSTR = {
+  sun:'Солнцем', moon:'Луной', mercury:'Меркурием', venus:'Венерой',
+  mars:'Марсом', jupiter:'Юпитером', saturn:'Сатурном', uranus:'Ураном',
+  neptune:'Нептуном', pluto:'Плутоном', north_node:'Сев.узлом',
+  south_node:'Юж.узлом', lilith:'Лилит', selena:'Селеной',
+  chiron:'Хироном', vertex:'Вертексом', pars_fortuna:'Парсом Фортуны',
+  asc:'Асцендентом', mc:'Серединой Неба',
+};
+
+const ASPECT_TEXT = {
+  'Соединение': 'в соединении с',
+  'Полусекстиль': 'в полусекстиле с',
+  'Секстиль': 'в секстиле с',
+  'Квадратура': 'в квадрате с',
+  'Тригон': 'в тригоне с',
+  'Квиконс': 'в квиконсе с',
+  'Оппозиция': 'в оппозиции с'
 };
 
 const PLANET_ORDER = [
@@ -379,6 +421,12 @@ async function initSWE() {
 }
 
 document.getElementById('transitDate').value = new Date().toISOString().split('T')[0];
+
+// Период по умолчанию: сегодня + 30 дней
+const today = new Date();
+document.getElementById('periodStart').value = today.toISOString().split('T')[0];
+const plus30 = new Date(today); plus30.setDate(plus30.getDate() + 30);
+document.getElementById('periodEnd').value = plus30.toISOString().split('T')[0];
 
 // (tabs removed — text-only output)
 
@@ -701,6 +749,178 @@ function renderTextOutput(natalPos, transitPos, natalHouses, transitHouses, hasL
 
   document.getElementById('output').value = L.join('\n');
 }
+
+// ── Роутер: выбор режима ──
+window.runCalc = function() {
+  const mode = document.querySelector('input[name="calcMode"]:checked').value;
+  if (mode === 'period') window.calcPeriod();
+  else window.calc();
+};
+
+// ── РАСЧЁТ НА ПЕРИОД ──
+window.calcPeriod = function() {
+  const errEl = document.getElementById('error');
+  errEl.textContent = '';
+  if (!swe) { errEl.textContent = 'Swiss Ephemeris ещё загружается...'; return; }
+
+  const btn = document.getElementById('calcBtn');
+  btn.disabled = true; btn.textContent = 'РАСЧЁТ...';
+
+  try {
+    // Данные рождения
+    const bDate = document.getElementById('birthDate').value;
+    const bTime = document.getElementById('birthTime').value;
+    const bLat = parseFloat(document.getElementById('birthLat').value);
+    const bLon = parseFloat(document.getElementById('birthLon').value);
+    const bTz = document.getElementById('birthTz').value;
+    const nameVal = document.getElementById('name').value;
+
+    // Период
+    const startStr = document.getElementById('periodStart').value;
+    const endStr = document.getElementById('periodEnd').value;
+    const excludeMoon = document.getElementById('excludeMoon').checked;
+
+    if (!bDate || !bTime || !bLat || !bLon || !bTz) throw new Error('Заполните все поля рождения.');
+    if (!startStr || !endStr) throw new Error('Укажите начало и конец периода.');
+    if (new Date(startStr) > new Date(endStr)) throw new Error('Начало периода должно быть раньше конца.');
+
+    // Натал (один раз)
+    const [bY, bM, bD] = bDate.split('-').map(Number);
+    const [bH, bMin] = bTime.split(':').map(Number);
+    const uBirth = localToUTC(bY, bM, bD, bH, bMin, bTz);
+    const jdBirth = sweJulday(uBirth.year, uBirth.month, uBirth.day, uBirth.hour + uBirth.minute/60 + uBirth.second/3600);
+
+    const natalPos = calcPositions(jdBirth);
+    const natalHouses = calcAllHouses(jdBirth, bLat, bLon);
+
+    // Парс Фортуны натальный
+    if (natalPos.sun && natalPos.moon && !isNaN(natalHouses.asc)) {
+      const sunH = houseOf(natalPos.sun.longitude, natalHouses.cusps);
+      const isDay = sunH >= 7 && sunH <= 12;
+      natalPos.pars_fortuna = { longitude: isDay ? norm(natalHouses.asc + natalPos.moon.longitude - natalPos.sun.longitude) : norm(natalHouses.asc + natalPos.sun.longitude - natalPos.moon.longitude), retrograde: false, speed: 0 };
+    }
+    natalPos.asc = { longitude: natalHouses.asc, isAngle: true };
+    natalPos.mc = { longitude: natalHouses.mc, isAngle: true };
+    natalPos.vertex = { longitude: natalHouses.vertex, isAngle: true };
+
+    // Цикл по дням
+    let currentDate = new Date(startStr);
+    const endDate = new Date(endStr);
+    const ongoingPeriods = {};
+    const completedPeriods = [];
+
+    const fmtD = (d) => d.toLocaleDateString('ru-RU', {day:'2-digit', month:'2-digit', year:'numeric'});
+
+    while (currentDate <= endDate) {
+      const jdT = sweJulday(currentDate.getFullYear(), currentDate.getMonth() + 1, currentDate.getDate(), 12.0);
+      const transitPos = calcPositions(jdT);
+      const crossAsp = calcCrossAspects(transitPos, natalPos);
+
+      const todaysKeys = new Set();
+
+      crossAsp.forEach(a => {
+        if (excludeMoon && a.transit === 'moon') return;
+
+        const aspectId = `${a.transit}_${a.type}_${a.natal}`;
+        todaysKeys.add(aspectId);
+
+        const tName = PLANET_NAMES[a.transit] || a.transit;
+        const nName = PLANET_NAMES_INSTR[a.natal] || a.natal;
+        const aspText = ASPECT_TEXT[a.type] || a.type;
+        const nDeg = fmtDegShort(natalPos[a.natal].longitude);
+        const nH = natalPos[a.natal] ? houseOf(natalPos[a.natal].longitude, natalHouses.cusps) : '';
+
+        const line = `тр. ${tName} ${aspText} нат. ${nName} (${nDeg}, дом ${nH})`;
+
+        if (!ongoingPeriods[aspectId]) {
+          ongoingPeriods[aspectId] = {
+            text: line,
+            transit: a.transit,
+            start: new Date(currentDate),
+            end: new Date(currentDate),
+            minOrb: Math.abs(parseFloat(a.orb)),
+            exactDate: new Date(currentDate)
+          };
+        } else {
+          ongoingPeriods[aspectId].end = new Date(currentDate);
+          const orbVal = Math.abs(parseFloat(a.orb));
+          if (orbVal < ongoingPeriods[aspectId].minOrb) {
+            ongoingPeriods[aspectId].minOrb = orbVal;
+            ongoingPeriods[aspectId].exactDate = new Date(currentDate);
+          }
+        }
+      });
+
+      // Закрываем аспекты, которых сегодня нет
+      for (const key in ongoingPeriods) {
+        if (!todaysKeys.has(key)) {
+          completedPeriods.push(ongoingPeriods[key]);
+          delete ongoingPeriods[key];
+        }
+      }
+
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+
+    // Закрываем оставшиеся
+    for (const key in ongoingPeriods) completedPeriods.push(ongoingPeriods[key]);
+
+    // Сортировка: по дате начала, потом по скорости планеты (медленные первые)
+    const speedOrder = { pluto:0, neptune:1, uranus:2, chiron:3, saturn:4, jupiter:5, mars:6, venus:7, sun:8, mercury:9, north_node:10, south_node:11, lilith:12, selena:13, moon:14 };
+    completedPeriods.sort((a, b) => {
+      const d = a.start - b.start;
+      if (d !== 0) return d;
+      return (speedOrder[a.transit] || 99) - (speedOrder[b.transit] || 99);
+    });
+
+    // Сборка текста
+    const L = [];
+    L.push('══════════ ТРАНЗИТЫ НА ПЕРИОД ══════════');
+    L.push('');
+    if (nameVal) L.push('Имя: ' + nameVal);
+    L.push('Дата рождения: ' + bDate + ', ' + bTime);
+    L.push('Период: ' + fmtD(new Date(startStr)) + ' — ' + fmtD(endDate));
+    if (excludeMoon) L.push('(без транзитной Луны)');
+    L.push('');
+    L.push('──────────────────────────────────────────');
+    L.push('');
+
+    if (!completedPeriods.length) {
+      L.push('Активных транзитных аспектов не обнаружено.');
+    } else {
+      completedPeriods.forEach(p => {
+        L.push(p.text);
+        const startS = fmtD(p.start);
+        const endS = fmtD(p.end);
+        const peakS = fmtD(p.exactDate);
+        if (startS === endS) {
+          L.push(`   ${startS} | ПИК: ${peakS} | орб ${p.minOrb.toFixed(2)}°`);
+        } else {
+          L.push(`   С ${startS} по ${endS} | ПИК: ${peakS} | орб ${p.minOrb.toFixed(2)}°`);
+        }
+        L.push('──────────────────────────────────────────');
+      });
+    }
+
+    L.push('');
+    L.push('══════════════════════════════════════════');
+
+    document.getElementById('output').value = L.join('\n');
+    document.getElementById('resultBlock').style.display = 'block';
+
+    // Скрываем таблицы — показываем только текст
+    document.getElementById('comparisonTable').style.display = 'none';
+    document.getElementById('aspectsTable').style.display = 'none';
+    document.getElementById('housesBlock').style.display = 'none';
+    document.getElementById('diagBar').innerHTML = `<b>ПЕРИОД:</b> ${fmtD(new Date(startStr))} — ${fmtD(endDate)} | Найдено аспектов: ${completedPeriods.length}`;
+
+  } catch(e) {
+    console.error(e);
+    errEl.textContent = e.message;
+  } finally {
+    btn.disabled = false; btn.textContent = 'РАССЧИТАТЬ';
+  }
+};
 
 window.copyText = function() {
   const ta = document.getElementById('output');
